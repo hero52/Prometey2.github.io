@@ -76,14 +76,6 @@ background: red;
 .menu-main a {display: block;}
 }
 
-
-
-
-
-
-
-
-
 #particles-js{
     position:fixed;
     top: 0;
@@ -97,6 +89,16 @@ background: red;
     background-size: cover;
     background-position: 50% 50%;
 }
+
+.page{
+  z-index: 999999;
+  padding-top: 30px;
+  
+}
+
+
+
+
 
 .clearfix:before, .clearfix:after{
   content: " ";
