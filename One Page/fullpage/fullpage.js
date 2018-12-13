@@ -1,5 +1,5 @@
 /*!
- * fullPage 3.0.2
+ * fullPage 3.0.4
  * https://github.com/alvarotrigo/fullPage.js
  *
  * @license GPLv3 for open source use only
@@ -90,7 +90,7 @@
     var SLIDES_ARROW_NEXT_SEL = SLIDES_ARROW_SEL + SLIDES_NEXT_SEL;
 
     function initialise(containerSelector, options) {
-        var isLicenseValid = options && new RegExp('([\\d\\w]{8}-){3}[\\d\\w]{8}|OPEN-SOURCE-GPLV3-LICENSE').test(options.licenseKey) || document.domain.indexOf('alvarotrigo.com') > -1;
+        var isOK = options && new RegExp('([\\d\\w]{8}-){3}[\\d\\w]{8}|^(?=.*?[A-Y])(?=.*?[a-y])(?=.*?[0-8])(?=.*?[#?!@$%^&*-]).{8,}$').test(options['li'+'cen'+'seK' + 'e' + 'y']) || document.domain.indexOf('al'+'varotri' +'go' + '.' + 'com') > -1;
 
         //only once my friend!
         if(hasClass($('html'), ENABLED)){ displayWarnings(); return; }
@@ -223,6 +223,7 @@
         var keydownId;
         var originals = deepExtend({}, options); //deep copy
         var activeAnimation;
+        var g_initialAnchorsInDom = false;
 
         displayWarnings();
 
@@ -345,14 +346,19 @@
             }
             else{
                 setIsScrollAllowed(value, 'all', 'm');
+            }
+        }
 
-                if(value){
-                    setMouseWheelScrolling(true);
-                    addTouchHandler();
-                }else{
-                    setMouseWheelScrolling(false);
-                    removeTouchHandler();
-                }
+        /**
+        * Adds or remove the mouse wheel hijacking
+        */
+        function setMouseHijack(value){
+            if(value){
+                setMouseWheelScrolling(true);
+                addTouchHandler();
+            }else{
+                setMouseWheelScrolling(false);
+                removeTouchHandler();
             }
         }
 
@@ -595,6 +601,7 @@
             setOptionsFromDOM();
             prepareDom();
             setAllowScrolling(true);
+            setMouseHijack(true);
             setAutoScrolling(options.autoScrolling, 'internal');
             responsive();
 
@@ -605,6 +612,11 @@
                 scrollToAnchor();
             }
             window.addEventListener('load', scrollToAnchor);
+
+            //if we use scrollOverflow we'll fire afterRender in the scrolloverflow file
+            if(!options.scrollOverflow){
+                afterRenderActions();
+            }
         }
 
         function bindEvents(){
@@ -631,22 +643,7 @@
             //Scrolls to the section when clicking the navigation bullet
             //simulating the jQuery .on('click') event using delegation
             ['click', 'touchstart'].forEach(function(eventName){
-                document.addEventListener(eventName, function(e){
-                    var target = e.target;
-
-                    if(target && closest(target, SECTION_NAV_SEL + ' a')){
-                        sectionBulletHandler.call(target, e);
-                    }
-                    else if(matches(target, SECTION_NAV_TOOLTIP_SEL)){
-                        tooltipTextHandler.call(target);
-                    }
-                    else if(matches(target, SLIDES_ARROW_SEL)){
-                        slideArrowHandler.call(target, e);
-                    }
-                    else if(matches(target, SLIDES_NAV_LINK_SEL) || closest(target, SLIDES_NAV_LINK_SEL) != null){
-                        slideBulletHandler.call(target, e);
-                    }
-                });
+                document.addEventListener(eventName, delegatedEvents);
             });
 
             /**
@@ -655,16 +652,36 @@
             */
             if(options.normalScrollElements){
                 ['mouseenter', 'touchstart'].forEach(function(eventName){
-                    forMouseLeaveOrTOuch(eventName, false);
+                    forMouseLeaveOrTouch(eventName, false);
                 });
 
                 ['mouseleave', 'touchend'].forEach(function(eventName){
-                   forMouseLeaveOrTOuch(eventName, true);
+                   forMouseLeaveOrTouch(eventName, true);
                 });
             }
         }
 
-        function forMouseLeaveOrTOuch(eventName, allowScrolling){
+        function delegatedEvents(e){
+            var target = e.target;
+
+            if(target && closest(target, SECTION_NAV_SEL + ' a')){
+                sectionBulletHandler.call(target, e);
+            }
+            else if(matches(target, SECTION_NAV_TOOLTIP_SEL)){
+                tooltipTextHandler.call(target);
+            }
+            else if(matches(target, SLIDES_ARROW_SEL)){
+                slideArrowHandler.call(target, e);
+            }
+            else if(matches(target, SLIDES_NAV_LINK_SEL) || closest(target, SLIDES_NAV_LINK_SEL) != null){
+                slideBulletHandler.call(target, e);
+            }
+            else if(closest(target, options.menu + ' [data-menuanchor]')){
+                menuItemsHandler.call(target, e);
+            }
+        }
+
+        function forMouseLeaveOrTouch(eventName, allowScrolling){
             //a way to pass arguments to the onMouseEnterOrLeave function
             document['fp_' + eventName] = allowScrolling;
             document.addEventListener(eventName, onMouseEnterOrLeave, true); //capturing phase
@@ -676,8 +693,8 @@
             }
             var normalSelectors = options.normalScrollElements.split(',');
             normalSelectors.forEach(function(normalSelector){
-                if(matches(e.target, normalSelector)){
-                    setAllowScrolling(document['fp_' + e.type]); //e.type = eventName
+                if(closest(e.target, normalSelector) != null){
+                    setMouseHijack(document['fp_' + e.type]); //e.type = eventName
                 }
             });
         }
@@ -692,6 +709,7 @@
                 var attrName = '[data-anchor]';
                 var anchors = $(options.sectionSelector.split(',').join(attrName + ',') + attrName, container);
                 if(anchors.length){
+                    g_initialAnchorsInDom = true;
                     anchors.forEach(function(item){
                         options.anchors.push(item.getAttribute('data-anchor').toString());
                     });
@@ -771,8 +789,6 @@
 
             if(options.scrollOverflow){
                 scrollBarHandler = options.scrollOverflowHandler.init(options);
-            }else{
-                afterRenderActions();
             }
         }
 
@@ -921,7 +937,7 @@
                     link = options.anchors[i];
                 }
 
-                li += '<li><a href="#' + link + '"><span></span></a>';
+                li += '<li><a href="#' + link + '"><span class="fp-sr-only">' + getBulletLinkName(i, 'Section') + '</span><span></span></a>';
 
                 // Only add tooltip if needed (defined by user)
                 var tooltip = options.navigationTooltips[i];
@@ -941,6 +957,15 @@
 
             var bullet = $('li', $(SECTION_NAV_SEL)[0])[index($(SECTION_ACTIVE_SEL)[0], SECTION_SEL)];
             addClass($('a', bullet), ACTIVE);
+        }
+
+        /**
+        * Gets the name for screen readers for a section/slide navigation bullet.
+        */
+        function getBulletLinkName(i, defaultName){
+            return options.navigationTooltips[i]
+                || options.anchors[i]
+                || defaultName + ' ' + (i+1)
         }
 
         /*
@@ -1221,7 +1246,6 @@
         var touchEndX = 0;
 
         /* Detecting touch events
-
         * As we are changing the top property of the page on scrolling, we can not use the traditional way to detect it.
         * This way, the touchstart and the touch moves shows an small difference between them which is the
         * used one to determine the direction.
@@ -1327,6 +1351,12 @@
         function MouseWheelHandler(e) {
             var curTime = new Date().getTime();
             var isNormalScroll = hasClass($(COMPLETELY_SEL)[0], NORMAL_SCROLL);
+
+            //is scroll allowed?
+            if (!isScrollAllowed.m.down && !isScrollAllowed.m.up) {
+                preventDefault(e);
+                return false;
+            }
 
             //autoscrolling and not zooming?
             if(options.autoScrolling && !controlPressed && !isNormalScroll){
@@ -1515,7 +1545,7 @@
             }
 
             //callback (onLeave) if the site is not just resizing and readjusting the slides
-            if(isFunction(options.onLeave) && !v.localIsResizing){
+            if(!v.localIsResizing){
                 var direction = v.yMovement;
 
                 //required for continousVertical
@@ -1526,8 +1556,10 @@
                 //for the callback
                 v.direction = direction;
 
-                if(fireCallback('onLeave', v) === false){
-                    return;
+                if(isFunction(options.onLeave)){
+                    if(fireCallback('onLeave', v) === false){
+                        return;
+                    }
                 }
             }
 
@@ -1696,7 +1728,6 @@
                         /* Hack!
                         The timeout prevents setting the most dominant section in the viewport as "active" when the user
                         scrolled to a smaller section by using the mousewheel (auto scrolling) rather than draging the scroll bar.
-
                         When using scrollBar:true It seems like the scroll events still getting propagated even after the scrolling animation has finished.
                         */
                         setTimeout(function(){
@@ -2062,19 +2093,21 @@
         function onTab(e){
             var isShiftPressed = e.shiftKey;
             var activeElement = document.activeElement;
-            var activeSection = $(SECTION_ACTIVE_SEL)[0];
-            var activeSlide = $(SLIDE_ACTIVE_SEL, activeSection)[0];
-            var focusableWrapper = activeSlide ? activeSlide : activeSection;
-            var focusableElements = $(focusableElementsString + ':not([tabindex="-1"])', focusableWrapper);
+            var focusableElements = getFocusables(getSlideOrSection($(SECTION_ACTIVE_SEL)[0]));
 
             function preventAndFocusFirst(e){
                 preventDefault(e);
-                return focusableElements[0].focus();
+                return focusableElements[0] ? focusableElements[0].focus() : null;
+            }
+
+            //outside any section or slide? Let's not hijack the tab!
+            if(isFocusOutside(e)){
+                return;
             }
 
             //is there an element with focus?
             if(activeElement){
-                if(closest(activeElement, SECTION_ACTIVE_SEL + ',' + SLIDE_ACTIVE_SEL) == null){
+                if(closest(activeElement, SECTION_ACTIVE_SEL + ',' + SECTION_ACTIVE_SEL + ' ' + SLIDE_ACTIVE_SEL) == null){
                     activeElement = preventAndFocusFirst(e);
                 }
             }
@@ -2091,6 +2124,31 @@
             ){
                 preventDefault(e);
             }
+        }
+
+        /**
+        * Gets all the focusable elements inside the passed element.
+        */
+        function getFocusables(el){
+            return [].slice.call($(focusableElementsString, el)).filter(function(item) {
+                    return item.getAttribute('tabindex') !== '-1'
+                    //are also not hidden elements (or with hidden parents)
+                    && item.offsetParent !== null;
+            });
+        }
+
+        /**
+        * Determines whether the focus is outside fullpage.js sections/slides or not.
+        */
+        function isFocusOutside(e){
+            var allFocusables = getFocusables(document);
+            var currentFocusIndex = allFocusables.indexOf(document.activeElement);
+            var focusDestinationIndex = e.shiftKey ? currentFocusIndex - 1 : currentFocusIndex + 1;
+            var focusDestination = allFocusables[focusDestinationIndex];
+            var destinationItemSlide = nullOrSlide(closest(focusDestination, SLIDE_SEL));
+            var destinationItemSection = nullOrSection(closest(focusDestination, SECTION_SEL));
+
+            return !destinationItemSlide && !destinationItemSection;
         }
 
         //Scrolling horizontally when clicking on the slider controls.
@@ -2134,6 +2192,14 @@
             var destiny = $(SLIDE_SEL, slides)[index(closest(this, 'li'))];
 
             landscapeScroll(slides, destiny);
+        }
+
+        //Menu item handler when not using anchors or using lockAnchors:true
+        function menuItemsHandler(e){
+            if($(options.menu)[0] && (options.lockAnchors || !options.anchors.length)){
+                preventDefault(e);
+                moveTo(this.getAttribute('data-menuanchor'));
+            }
         }
 
         /**
@@ -2369,8 +2435,15 @@
 
                     //making sure the change in the viewport size is enough to force a rebuild. (20 % of the window to avoid problems when hidding scroll bars)
                     if( Math.abs(currentHeight - previousHeight) > (20 * Math.max(previousHeight, currentHeight) / 100) ){
-                        reBuild(true);
-                        previousHeight = currentHeight;
+                        resizeId = setTimeout(function(){
+                            reBuild(true);
+                            previousHeight = currentHeight;
+
+                            //issue #3336
+                            //when using Chrome we add a small timeout to get the right window height 
+                            //https://stackoverflow.com/a/12556928/1081396
+                            //https://stackoverflow.com/questions/13807810/ios-chrome-detection
+                        }, navigator.userAgent.match('CriOS') ? 50 : 0);
                     }
                 }
             }else{
@@ -2575,7 +2648,7 @@
             var slide = getSlideByAnchor(slideAnchor, section);
 
             //we need to scroll to the section and then to the slide
-            if (sectionAnchor !== lastScrolledDestiny && !hasClass(section, ACTIVE)){
+            if (getAnchor(section) !== lastScrolledDestiny && !hasClass(section, ACTIVE)){
                 scrollPage(section, function(){
                     scrollSlider(slide);
                 });
@@ -2606,7 +2679,7 @@
             addClass(nav, 'fp-' + options.slidesNavPosition);
 
             for(var i=0; i< numSlides; i++){
-                appendTo(createElementFromHTML('<li><a href="#"><span></span></a></li>'), $('ul', nav)[0] );
+                appendTo(createElementFromHTML('<li><a href="#"><span class="fp-sr-only">'+ getBulletLinkName(i, 'Slide') +'</span><span></span></a></li>'), $('ul', nav)[0] );
             }
 
             //centering it
@@ -2822,11 +2895,14 @@
                     $body.addEventListener(events.touchmove, preventBouncing, {passive: false});
                 }
 
-                $(WRAPPER_SEL)[0].removeEventListener(events.touchstart, touchStartHandler);
-                $(WRAPPER_SEL)[0].removeEventListener(events.touchmove, touchMoveHandler, {passive: false});
+                var wrapper = $(WRAPPER_SEL)[0];
+                if(wrapper){
+                    wrapper.removeEventListener(events.touchstart, touchStartHandler);
+                    wrapper.removeEventListener(events.touchmove, touchMoveHandler, {passive: false});
 
-                $(WRAPPER_SEL)[0].addEventListener(events.touchstart, touchStartHandler);
-                $(WRAPPER_SEL)[0].addEventListener(events.touchmove, touchMoveHandler, {passive: false});
+                    wrapper.addEventListener(events.touchstart, touchStartHandler);
+                    wrapper.addEventListener(events.touchmove, touchMoveHandler, {passive: false});
+                }
             }
         }
 
@@ -2841,8 +2917,11 @@
                     $body.removeEventListener(events.touchmove, preventBouncing, {passive: false});
                 }
 
-                $(WRAPPER_SEL)[0].removeEventListener(events.touchstart, touchStartHandler);
-                $(WRAPPER_SEL)[0].removeEventListener(events.touchmove, touchMoveHandler, {passive: false});
+                var wrapper = $(WRAPPER_SEL)[0];
+                if(wrapper){
+                    wrapper.removeEventListener(events.touchstart, touchStartHandler);
+                    wrapper.removeEventListener(events.touchmove, touchMoveHandler, {passive: false});
+                }
             }
         }
 
@@ -2963,7 +3042,8 @@
         */
         function destroy(all){
             setAutoScrolling(false, 'internal');
-            setAllowScrolling(false);
+            setAllowScrolling(true);
+            setMouseHijack(false);
             setKeyboardScrolling(false);
             addClass(container, DESTROYED);
 
@@ -2973,7 +3053,6 @@
             clearTimeout(scrollId);
             clearTimeout(scrollId2);
 
-
             window.removeEventListener('scroll', scrollHandler);
             window.removeEventListener('hashchange', hashChangeHandler);
             window.removeEventListener('resize', resizeHandler);
@@ -2981,11 +3060,8 @@
             document.removeEventListener('keydown', keydownHandler);
             document.removeEventListener('keyup', keyUpHandler);
 
-            var clickTouchEvents = [sectionBulletHandler, tooltipTextHandler, slideArrowHandler, slideBulletHandler];
             ['click', 'touchstart'].forEach(function(eventName){
-                clickTouchEvents.forEach(function(foo){
-                    document.removeEventListener(eventName, foo);
-                });
+                document.removeEventListener(eventName, delegatedEvents);
             });
 
             ['mouseenter', 'touchstart', 'mouseleave', 'touchend'].forEach(function(eventName){
@@ -3057,13 +3133,18 @@
 
             //removing added classes
             $(SECTION_SEL + ', ' + SLIDE_SEL).forEach(function(item){
-                if(options.scrollOverflowHandler){
+                if(options.scrollOverflowHandler && options.scrollOverflow){
                     options.scrollOverflowHandler.remove(item);
                 }
                 removeClass(item, TABLE + ' ' + ACTIVE + ' ' + COMPLETELY);
                 var previousStyles = item.getAttribute('data-fp-styles');
                 if(previousStyles){
                     item.setAttribute('style', item.getAttribute('data-fp-styles'));
+                }
+
+                //removing anchors if they were not set using the HTML markup
+                if(hasClass(item, SECTION) && !g_initialAnchorsInDom){
+                    item.removeAttribute('data-anchor');
                 }
             });
 
@@ -3074,7 +3155,7 @@
             [TABLE_CELL_SEL, SLIDES_CONTAINER_SEL,SLIDES_WRAPPER_SEL].forEach(function(selector){
                 $(selector, container).forEach(function(item){
                     //unwrap not being use in case there's no child element inside and its just text
-                    item.outerHTML = item.innerHTML;
+                    unwrap(item);
                 });
             });
 
@@ -3085,8 +3166,7 @@
             });
 
             //scrolling the page to the top with no animation
-            $('html')[0].scrollTo(0, 0);
-            $('body')[0].scrollTo(0, 0);
+            window.scrollTo(0, 0);
 
             //removing selectors
             var usedSelectors = [SECTION, SLIDE, SLIDES_CONTAINER];
@@ -3112,7 +3192,7 @@
         * Displays warnings
         */
         function displayWarnings(){
-            if(!isLicenseValid){
+            if(!isOK){
                 showError('error', 'Fullpage.js version 3 has changed its license to GPLv3 and it requires a `licenseKey` option. Read about it here:');
                 showError('error', 'https://github.com/alvarotrigo/fullPage.js#options.');
             }
@@ -3130,8 +3210,9 @@
                 showError('warn', 'Option `loopTop/loopBottom` is mutually exclusive with `continuousVertical`; `continuousVertical` disabled');
             }
 
-            if(options.scrollBar && options.scrollOverflow){
-                showError('warn', 'Option `scrollBar` is mutually exclusive with `scrollOverflow`. Sections with scrollOverflow might not work well in Firefox');
+            if(options.scrollOverflow &&
+               (options.scrollBar || !options.autoScrolling)){
+                showError('warn', 'Options scrollBar:true and autoScrolling:false are mutually exclusive with scrollOverflow:true. Sections with scrollOverflow might not work well in Firefox');
             }
 
             if(options.continuousVertical && (options.scrollBar || !options.autoScrolling)){
@@ -3156,11 +3237,11 @@
             options.anchors.forEach(function(name){
 
                 //case insensitive selectors (http://stackoverflow.com/a/19465187/1081396)
-                var nameAttr =  [].slice.call($('[name]')).filter(function(item) {
+                var nameAttr = [].slice.call($('[name]')).filter(function(item) {
                     return item.getAttribute('name') && item.getAttribute('name').toLowerCase() == name.toLowerCase();
                 });
 
-                var idAttr =  [].slice.call($('[id]')).filter(function(item) {
+                var idAttr = [].slice.call($('[id]')).filter(function(item) {
                     return item.getAttribute('id') && item.getAttribute('id').toLowerCase() == name.toLowerCase();
                 });
 
@@ -3275,7 +3356,7 @@
             this.anchor = el.getAttribute('data-anchor');
             this.item = el;
             this.index = index(el, selector);
-            this.isLast = this.index === $(selector).length -1;
+            this.isLast = this.index === el.parentElement.querySelectorAll(selector).length -1;
             this.isFirst = !this.index;
         }
 
@@ -3317,25 +3398,29 @@
     * Extends a given Object properties and its childs.
     */
     function deepExtend(out) {
-      out = out || {};
+        out = out || {};
+        for (var i = 1, len = arguments.length; i < len; ++i){
+            var obj = arguments[i];
 
-      for (var i = 1; i < arguments.length; i++) {
-        var obj = arguments[i];
+            if(!obj){
+              continue;
+            }
 
-        if (!obj)
-          continue;
+            for(var key in obj){
+              if (!obj.hasOwnProperty(key)){
+                continue;
+              }
 
-        for (var key in obj) {
-          if (obj.hasOwnProperty(key)) {
-            if (typeof obj[key] === 'object' && obj[key] != null)
-              out[key] = deepExtend(out[key], obj[key]);
-            else
+              // based on https://javascriptweblog.wordpress.com/2011/08/08/fixing-the-javascript-typeof-operator/
+              if (Object.prototype.toString.call(obj[key]) === '[object Object]'){
+                out[key] = deepExtend(out[key], obj[key]);
+                continue;
+              }
+
               out[key] = obj[key];
-          }
+            }
         }
-      }
-
-      return out;
+        return out;
     }
 
     /**
@@ -3533,11 +3618,9 @@
 
     /**
     Usage:
-
     var wrapper = document.createElement('div');
     wrapper.className = 'fp-slides';
     wrap($('.slide'), wrapper);
-
     https://jsfiddle.net/qwzc7oy3/15/ (vanilla)
     https://jsfiddle.net/oya6ndka/1/ (jquery equivalent)
     */
@@ -3560,7 +3643,6 @@
     var wrapper = document.createElement('div');
     wrapper.className = 'fp-slides';
     wrap($('.slide'), wrapper);
-
     https://jsfiddle.net/qwzc7oy3/27/ (vanilla)
     https://jsfiddle.net/oya6ndka/4/ (jquery equivalent)
     */
@@ -3587,6 +3669,23 @@
         while(parent.firstChild !== wrapper){
             wrapper.appendChild(parent.firstChild);
        }
+    }
+
+    /**
+    * Usage:
+    * unwrap(document.querySelector('#pepe'));
+    * unwrap(element);
+    *
+    * https://jsfiddle.net/szjt0hxq/1/
+    *
+    */
+    function unwrap(wrapper) {
+        var wrapperContent = document.createDocumentFragment();
+        while (wrapper.firstChild) {
+            wrapperContent.appendChild(wrapper.firstChild);
+        }
+
+        wrapper.parentNode.replaceChild(wrapperContent, wrapper);
     }
 
     /**
@@ -3822,6 +3921,7 @@
         wrap: wrap,
         wrapAll: wrapAll,
         wrapInner: wrapInner,
+        unwrap: unwrap,
         closest: closest,
         after: after,
         before: before,
@@ -3838,7 +3938,8 @@
         filter: filter,
         untilAll: untilAll,
         nextAll: nextAll,
-        prevAll: prevAll
+        prevAll: prevAll,
+        showError: showError
     };
 
     return initialise;
@@ -3858,12 +3959,12 @@ if(window.jQuery && window.fullpage){
         }
 
         $.fn.fullpage = function(options) {
-            var FP = new fullpage('#' + $(this).attr('id'), options);
+            var FP = new fullpage(this[0], options);
 
             //Static API
             Object.keys(FP).forEach(function (key) {
                 $.fn.fullpage[key] = FP[key];
             });
         };
-    })(jQuery, fullpage);
+    })(window.jQuery, window.fullpage);
 }
